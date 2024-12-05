@@ -1,3 +1,4 @@
+import json
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -10,7 +11,7 @@ import re
 from selenium.common.exceptions import TimeoutException
 
 # Initializing User Input
-city = "vizag"
+city = "guntur"
 movie_name = "Pushpa 2: The Rule"
 user_date = 5
 language = "telugu"  # Language selection (can be 'Telugu', 'Hindi', etc.)
@@ -20,21 +21,66 @@ format = "2D"  # Format selection (can be '2D', '3D', or 'ALL') ALL is not worki
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service)
 
+# List of specific theaters to track
+theater_list = [
+    "Mythri Cinemas Phoenix Mall",
+    "PVR Guntur",
+    "JLE Cinemas"
+]
+
+# Dictionary to store the theater and show details
+theater_shows = {}
+
+# File path for storing previous show details
+file_path = 'theater_show_details.json'
+
+def load_previous_shows():
+    """Load previous show data from the JSON file."""
+    try:
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+def compare_shows(previous_shows, current_shows):
+    """Compare previous and current show data and print only the changes."""
+    changes_detected = False  # Flag to track if there are any changes
+    
+    for theater, current in current_shows.items():
+        if theater in previous_shows:
+            previous = previous_shows[theater]
+            added = [show for show in current if show not in previous]
+            removed = [show for show in previous if show not in current]
+            
+            # Print the changes
+            if added:
+                print(f"CHANGES DETECTED IN {theater}:")
+                print("  ADDED:", " | ".join(added))
+                changes_detected = True
+            if removed:
+                print(f"CHANGES DETECTED IN {theater}:")
+                print("  REMOVED:", " | ".join(removed))
+                changes_detected = True
+        else:
+            # If the theater is new, print its shows
+            print(f"NEW THEATER {theater} ADDED WITH SHOWS: {' | '.join(current)}")
+            changes_detected = True
+
+    if not changes_detected:
+        print("NO CHANGES")
+
 try:
     # Open the Paytm Movies page for the city
     url = f"https://paytm.com/movies/{city.lower()}"
     driver.get(url)
-    print(f"Opened URL: {url}")
 
     # Check if the page loads correctly by waiting for the body tag
     try:
         WebDriverWait(driver, 20).until(
             EC.visibility_of_element_located((By.TAG_NAME, "body"))
         )
-        print("Page loaded successfully.")
         time.sleep(0.5)
     except TimeoutException:
-        print("URL is invalid (check city name).")
         driver.quit()
         exit()
 
@@ -42,34 +88,18 @@ try:
     language_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{language.title()}']")
     if language_radio:
         language_radio[0].click()  # Click the radio button corresponding to the language
-        print(f"Language '{language.title()}' selected.")
-        
     else:
-        print(f"Language '{language.title()}' not available.")
+        pass
 
     # Step 2: Wait for a second before selecting the format
     time.sleep(0.5)
 
     # Step 3: Select format (either 2D, 3D, or ALL), if present
-    if format.upper() == "ALL":
-        format_radio_2d = driver.find_elements(By.XPATH, "//input[@type='radio'][@value='2D']")
-        format_radio_3d = driver.find_elements(By.XPATH, "//input[@type='radio'][@value='3D']")
-        
-        if format_radio_2d:
-            format_radio_2d[0].click()  # Click the 2D radio button
-            print("2D format selected.")
-        if format_radio_3d:
-            format_radio_3d[0].click()  # Click the 3D radio button
-            print("3D format selected.")
-        if not format_radio_2d and not format_radio_3d:
-            print("No format options available.")
+    format_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{format.upper()}']")
+    if format_radio:
+        format_radio[0].click()  # Click the radio button corresponding to the format
     else:
-        format_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{format.upper()}']")
-        if format_radio:
-            format_radio[0].click()  # Click the radio button corresponding to the format
-            print(f"Format '{format.upper()}' selected.")
-        else:
-            print(f"Format '{format.upper()}' not available.")
+        pass
 
     # Step 4: Wait for the page with the movie details to load
     time.sleep(1.5)
@@ -77,9 +107,7 @@ try:
     # Step 5: Check if the movie is available on the page
     try:
         driver.find_element(By.PARTIAL_LINK_TEXT, movie_name)
-        print(f"Movie '{movie_name}' found.")
     except:
-        print(f"Bookings for {movie_name}({language}) in {city.upper()} are not yet released!")
         driver.quit()
         exit()  # Stop the script if the movie is not found
 
@@ -88,7 +116,6 @@ try:
     # Step 6: Find and click the Movie_name movie link
     movie_link = driver.find_element(By.PARTIAL_LINK_TEXT, movie_name)
     movie_link.click()
-    print(f"Clicked on movie '{movie_name}' link.")
     time.sleep(2)
 
     # Check if the language selection popup is present
@@ -98,25 +125,23 @@ try:
         )
         time.sleep(0.5)
         
-        # Step 2: Handle the language selection popup
+        # Handle the language selection popup
         telugu_radio_button = driver.find_element(By.ID, f"{language.title()}-index-selection-dialog")
         if not telugu_radio_button.is_selected():
             telugu_radio_button.click()
 
-        # Step 3: Click the Proceed button
+        # Click the Proceed button
         proceed_button = driver.find_element(By.CLASS_NAME, "LanguageSelectionDialog_applyBtn__2frJM")
         proceed_button.click()
-        print("Language selected and proceeding...")
         
     except:
-        print("No language selection popup found, proceeding to the next steps. or check the language")
+        pass
 
     time.sleep(1)
     # Wait for the page with dates to load
     WebDriverWait(driver, 20).until(
         EC.visibility_of_all_elements_located((By.CLASS_NAME, "DatesDesktop_cinemaDates__jMukI"))
     )
-    print("Movie dates loaded successfully.")
     
     # Step 7: Select the date based on user input
     date_elements = driver.find_elements(By.CLASS_NAME, "DatesDesktop_cinemaDates__jMukI")
@@ -125,24 +150,17 @@ try:
         try:
             date_text = date_element.find_element(By.CLASS_NAME, "DatesDesktop_date__bL7mg").text.strip()
             if date_text == str(user_date):
-                # Use WebDriverWait to ensure the element is clickable
                 WebDriverWait(driver, 20).until(EC.element_to_be_clickable(date_element))
-                # Use ActionChains to move to the element and click it
                 actions = ActionChains(driver)
                 actions.move_to_element(date_element).click().perform()
-
-                # Optionally, scroll the element into view before clicking
                 driver.execute_script("arguments[0].scrollIntoView(true);", date_element)
-
-                # Add a delay of 3 seconds after clicking the date element
                 time.sleep(1.5)
-                print(f"Date {user_date} selected successfully!")
                 break
         except Exception as e:
-            print(f"Error selecting date: {str(e)}")
+            pass
 
     # Step 8: Extract theater names and session times
-    theater_elements = driver.find_elements(By.XPATH, f"//a[contains(@href, '/movies/{city}')]")
+    theater_elements = driver.find_elements(By.XPATH, f"//a[contains(@href, '/movies/{city.lower()}')]")
 
     # Regular expression to extract only time ending with AM/PM
     time_pattern = re.compile(r'\d{2}:\d{2} (AM|PM)')
@@ -160,46 +178,44 @@ try:
     total_shows = 0
 
     # Extract details for each theater
-    theater_count = 1
     for theater in theater_elements:
         theater_name = theater.text.split(',')[0]  # Extract name before the first comma
         if not theater_name.strip():
             continue
 
-        total_theaters += 1
-        print(f"Theater {theater_count}: {theater_name}")
-        try:
-            parent_div = theater.find_element(By.XPATH, "..//..//..")
-            session_times = parent_div.find_elements(By.XPATH, ".//div[contains(@class, 'yellowCol') or contains(@class, 'redCol') or contains(@class, 'greenCol') or contains(@class, 'greyCol')]")
-            
-            valid_session_times = []
-            for session in session_times:
-                time_text = session.text.strip()
-                match = time_pattern.match(time_text)
-                if match:
-                    status_class = session.get_attribute("class")
-                    status_class_split = status_class.split()
-                    status = status_mapping.get(status_class_split[0], "Unknown")
-                    valid_session_times.append(f"{match.group(0)} ({status})")
+        if theater_name in theater_list:  # Check if the theater is in our list
+            total_theaters += 1
+            shows = []
+            try:
+                parent_div = theater.find_element(By.XPATH, "..//..//..")
+                session_times = parent_div.find_elements(By.XPATH, ".//div[contains(@class, 'yellowCol') or contains(@class, 'redCol') or contains(@class, 'greenCol') or contains(@class, 'greyCol')]")
 
-            show_count = len(valid_session_times)
-            total_shows += show_count
-            if valid_session_times:
-                print(f"  Shows ({show_count}): {' | '.join(valid_session_times)}")
-            else:
-                print("  No session times available.")
-        except Exception as e:
-            print(f"Error processing theater: {str(e)}")
+                for session in session_times:
+                    time_text = session.text.strip()
+                    match = time_pattern.match(time_text)
+                    if match:
+                        status_class = session.get_attribute("class")
+                        status_class_split = status_class.split()
+                        status = status_mapping.get(status_class_split[0], "Unknown")
+                        shows.append(f"{match.group(0)} ({status})")
 
-        print("---------------------------------------------------")
-        theater_count += 1
+                if shows:
+                    theater_shows[theater_name] = shows
+                else:
+                    pass
+            except Exception as e:
+                pass
 
-    # Print summary
-    print(f"\"Movie: {movie_name.upper()}\"")
-    print(f"City: {city.upper()}")
-    print(f"Date: {user_date}th")
-    print(f"Total Theaters: {total_theaters}")
-    print(f"Total Shows: {total_shows}")
+    if total_theaters > 0:
+        # Compare with the previous data if available
+        previous_shows = load_previous_shows()
+        compare_shows(previous_shows, theater_shows)
+
+        # Save the current data to a JSON file
+        with open(file_path, 'w') as json_file:
+            json.dump(theater_shows, json_file, indent=4)
+    else:
+        pass
 
 finally:
     # Close the driver
