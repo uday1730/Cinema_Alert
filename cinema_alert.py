@@ -10,9 +10,9 @@ import re
 from selenium.common.exceptions import TimeoutException
 
 # Initializing User Input
-city = "vizag"
+city = "guntur"
 movie_name = "Pushpa 2: The Rule"
-user_date = 5
+user_date = 6
 language = "telugu"  # Language selection (can be 'Telugu', 'Hindi', etc.)
 format = "2D"  # Format selection (can be '2D', '3D', or 'ALL') ALL is not working properly
 
@@ -142,7 +142,7 @@ try:
             print(f"Error selecting date: {str(e)}")
 
     # Step 8: Extract theater names and session times
-    theater_elements = driver.find_elements(By.XPATH, f"//a[contains(@href, '/movies/{city}')]")
+    theater_elements = driver.find_elements(By.XPATH, f"//a[contains(@href, '/movies/{city.lower()}')]")
 
     # Regular expression to extract only time ending with AM/PM
     time_pattern = re.compile(r'\d{2}:\d{2} (AM|PM)')
@@ -195,7 +195,7 @@ try:
         theater_count += 1
 
     # Print summary
-    print(f"\"Movie: {movie_name.upper()}\"")
+    print(f"Movie: \"{movie_name.upper()}\"")
     print(f"City: {city.upper()}")
     print(f"Date: {user_date}th")
     print(f"Total Theaters: {total_theaters}")
