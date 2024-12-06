@@ -152,7 +152,7 @@ try:
         'yellowCol': 'FF',
         'greenCol': 'Available',
         'redCol': 'Few Left',
-        'grayCol': 'Blocked'
+        'greyCol': 'Blocked'
     }
 
     # Initialize counters
@@ -170,7 +170,7 @@ try:
         print(f"Theater {theater_count}: {theater_name}")
         try:
             parent_div = theater.find_element(By.XPATH, "..//..//..")
-            session_times = parent_div.find_elements(By.XPATH, ".//div[contains(@class, 'yellowCol') or contains(@class, 'redCol') or contains(@class, 'greenCol') or contains(@class, 'grayCol')]")
+            session_times = parent_div.find_elements(By.XPATH, ".//div[contains(@class, 'yellowCol') or contains(@class, 'redCol') or contains(@class, 'greenCol') or contains(@class, 'greyCol')]")
             
             valid_session_times = []
             for session in session_times:
