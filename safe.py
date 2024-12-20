@@ -10,11 +10,11 @@ import re
 from selenium.common.exceptions import TimeoutException
 
 # Initializing User Input
-city = "guntur"
+city = "bengaluru"
 movie_name = "Pushpa 2: The Rule"
-user_date = 6
+user_date = 18
 language = "telugu"  # Language selection (can be 'Telugu', 'Hindi', etc.)
-format = "ALL"  # Format selection (can be '2D', '3D', or 'ALL')
+format = "2D"  # Format selection (can be '2D', '3D', or 'ALL')
 
 # Initialize WebDriver
 service = Service(ChromeDriverManager().install())
@@ -163,6 +163,7 @@ try:
     theater_count = 1
     for theater in theater_elements:
         theater_name = theater.text.split(',')[0]  # Extract name before the first comma
+        print(theater_name)
         if not theater_name.strip():
             continue
 
@@ -184,10 +185,13 @@ try:
 
             show_count = len(valid_session_times)
             total_shows += show_count
+
             if valid_session_times:
-                print(f"  Shows ({show_count}): {' | '.join(valid_session_times)}")
+                pass
+                #print(f"  Shows ({show_count}): {' | '.join(valid_session_times)}")
             else:
-                print("  No session times available.")
+                pass
+                #print("  No session times available.")
         except Exception as e:
             print(f"Error processing theater: {str(e)}")
 
