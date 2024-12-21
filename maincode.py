@@ -4,11 +4,11 @@
 city = "bengaluru"
 movie_name = "ui" # Paste exactly
 user_date = 21
-language = "telugu"  # Language selection (can be 'Telugu', 'Hindi', etc.)
+language = "kannada"  # Language selection (can be 'Telugu', 'Hindi', etc.)
 format = "2D"  # Format selection (can be '2D', '3D', or 'ALL') ALL is not working properly
 iteration = 0 #To print the present iteration
-tracking_frequencey = 10 #At what iterations should tracking be printed
 running_frequencey = 30 #At what time gap should next iteration of entire program
+tracking_frequencey = 10 #At what iterations should tracking be printed
 # List of specific theaters to track
 theater_list = []
 
@@ -31,6 +31,7 @@ from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+import sys
 
 options = Options()
 options.add_argument("--no-sandbox")
@@ -52,9 +53,23 @@ Complete!
 [ec2-user@ip-172-31-95-123 ~]$ Xvfb :99 & export DISPLAY=:99
 [1] 36451
 [ec2-user@ip-172-31-95-123 ~]$ python3 maincode.py
+
+Xvfb :99 & export DISPLAY=:99
+
+nohup maincode.py &
+
+tail -f nohup.out
+
+ps aux | grep python
+
+kill <PID>
+
+kill -9 <PID>
+
 """
 #For cmd copy code
 #scp -i final_pem.pem maincode.py ec2-user@3.83.104.46:/home/ec2-user/  
+#scp -i final_pem.pem theater_show_details.json ec2-user@52.90.83.185:/home/ec2-user/
 
 
 
@@ -459,7 +474,7 @@ try:
                     aws_message += movie_not_available + "\n"
                     aws_message += send_telegram_message_for_tracking(movie_not_available)+"\n"
                     send_telegram_message_for_aws_status(aws_message)
-                    time.sleep(50)
+                    time.sleep(30)
                     core_process()
                 
 
@@ -520,7 +535,7 @@ try:
                     aws_message += "\n" + send_telegram_message_for_alert(date_not_available) + "\n"
                     aws_message += send_telegram_message_for_tracking(date_not_available) + "\n"
                     send_telegram_message_for_aws_status(aws_message)
-                    time.sleep(50)
+                    time.sleep(30)
                     core_process()
 
             except Exception as e:
@@ -528,7 +543,7 @@ try:
                 driver.quit()
                 exit()  # Stop the script as the date is invalid
 
-            time.sleep(1)
+            time.sleep(3)
 
             try:
                 # Step 8: Extract theater names and session times
@@ -557,7 +572,7 @@ try:
                 if (iteration % tracking_frequencey == 0):
                     print(f"Time to track entire {city}")
                     aws_message += all_theaters() + "\n"
-
+                time.sleep(1)
                 count = 0
                 print("Extracting theaters")
                 for theater in theater_elements:
@@ -596,6 +611,8 @@ try:
             except Exception as e:
                 print(e)
                 pass 
+
+            sys.stdout.flush()
 
             # Sleep for 30 seconds before running again
             global running_frequencey
