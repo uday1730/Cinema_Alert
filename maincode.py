@@ -11,7 +11,7 @@ theater_to_track = []
 format = "2D"  # Format selection (can be '2D', '3D', or 'ALL') ALL is not working properly
 iteration = 0 #To print the present iteration
 running_frequencey = 5 #At what time gap should next iteration of entire program
-tracking_frequencey = 50 #At what iterations should tracking be printed
+tracking_frequencey = 75 #At what iterations should tracking be printed
 missed_call = 0
 
 # Dictionary of all available theaters
@@ -417,7 +417,6 @@ def total_function():
     from webdriver_manager.chrome import ChromeDriverManager
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.chrome.options import Options
-    import sys
 
     options = Options()
     options.add_argument("--no-sandbox")
@@ -442,10 +441,10 @@ def total_function():
                 #send_telegram_message_for_aws_status(aws_message)
                 # Open the Paytm Movies page for the city
                 url = f"https://paytm.com/movies/{city.lower()}"
-                driver.get(url)
 
                 # Check if the page loads correctly by waiting for the body tag
                 try:
+                    driver.get(url)
                     WebDriverWait(driver, 20).until(
                         EC.visibility_of_element_located((By.TAG_NAME, "body"))
                     )
@@ -463,24 +462,30 @@ def total_function():
                 print("URL Loaded")
 
                 # Step 1: Select language (either Hindi, Telugu, etc.), if available
-                language_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{language.title()}']")
-                if language_radio:
-                    language_radio[0].click()  # Click the radio button corresponding to the language
-                    print("Clicked language radio button")
-                else:
-                    print("No language radio button")
+                try:
+                    language_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{language.title()}']")
+                    if language_radio:
+                        language_radio[0].click()  # Click the radio button corresponding to the language
+                        print("Clicked language radio button")
+                    else:
+                        print("No language radio button")
+                        pass
+                except:
                     pass
 
                 # Step 2: Wait for a second before selecting the format
                 # time.sleep(0.5)
 
                 # Step 3: Select format (either 2D, 3D, or ALL), if present
-                format_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{format.upper()}']")
-                if format_radio:
-                    format_radio[0].click()  # Click the radio button corresponding to the format
-                    print("Clicked format radio button")
-                else:
-                    print("No language radio button")
+                try:
+                    format_radio = driver.find_elements(By.XPATH, f"//input[@type='radio'][@value='{format.upper()}']")
+                    if format_radio:
+                        format_radio[0].click()  # Click the radio button corresponding to the format
+                        print("Clicked format radio button")
+                    else:
+                        print("No language radio button")
+                        pass
+                except:
                     pass
                 
 
@@ -593,9 +598,7 @@ def total_function():
                         core_process()
 
                 except Exception as e:
-                    print(e)
-                    driver.quit()
-                    exit()  # Stop the script as the date is invalid
+                    core_process()
 
                 time.sleep(3)
 
@@ -665,10 +668,8 @@ def total_function():
                         else:
                             pass
                     except Exception as e:
-                        print(e)
-                        pass 
+                        total_function()
 
-                    sys.stdout.flush()
                 theater_run()
 
                 while(True):
@@ -687,21 +688,15 @@ def total_function():
                                 EC.presence_of_element_located((By.CLASS_NAME, "MovieSessionsListingDesktop_movieSessions__KYv1d"))
                             )
 
-                            # Locate the specific anchor tag containing the text
-                            theater_element = WebDriverWait(driver, 20).until(
-                                EC.presence_of_element_located((By.XPATH, f"//a[not(normalize-space(text())={city.title()}) and normalize-space(text())!='']"))
-                            )
-
-
-                            # Print the text to verify
-                            print("Theater element found:", theater_element.text)
-
                         except Exception as e:
-                            print("Error:", e)
+                            total_function()
+
                         time.sleep(running_frequencey)
                         theater_run()
+
                     except:
                         total_function()
+
         core_process()
 
     except Exception as e :
