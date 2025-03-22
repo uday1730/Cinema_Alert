@@ -3,15 +3,16 @@
 
 
 # Initializing User Input
-movie_name = "Mufasa: The Lion King" # Paste exactly
-city = "guntur".title()
-user_date = 22
-language = "telugu"  # Language selection (can be 'Telugu', 'Hindi', etc.)
-theater_to_track = []
+movie_name = "Game Changer" # Paste exactly
+city = "Bengaluru".title()
+user_date = 10
+language = "Telugu"  # Language selection (can be 'Telugu', 'Hindi', etc.)
+theaters_to_track = []
 format = "2D"  # Format selection (can be '2D', '3D', or 'ALL') ALL is not working properly
 iteration = 0 #To print the present iteration
+aws_message = ""
 running_frequencey = 5 #At what time gap should next iteration of entire program
-tracking_frequencey = 75 #At what iterations should tracking be printed
+tracking_frequencey = 50 #At what iterations should tracking be printed
 missed_call = 0
 
 # Dictionary of all available theaters
@@ -37,7 +38,7 @@ theaters_dict = {
 theater_set = set()
 
 # Add the selected theaters to the theater_set based on the provided numbers
-for num in theater_to_track:
+for num in theaters_to_track:
     if num in theaters_dict:  # Check if the number exists in the dictionary
         theater_set.add(theaters_dict[num])
 
@@ -56,6 +57,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 import re
 from selenium.common.exceptions import TimeoutException
 import requests
+import gc
 
 # Dictionary to store the theater and show details
 theater_shows = {}
@@ -77,7 +79,12 @@ Complete!
 
 Xvfb :99 & export DISPLAY=:99
 
-"""
+"""\
+#For cmd copy code
+#scp -i cinema_key.pem test.py ec2-user@54.80.24.14:/home/ec2-user/  
+#scp -i cinema_key.pem theater_show_details.json ec2-user@54.80.24.14:/home/ec2-user/
+
+
 #For cmd copy code
 #scp -i final_pem.pem maincode.py ec2-user@3.83.104.46:/home/ec2-user/  
 #scp -i final_pem.pem theater_show_details.json ec2-user@52.90.83.185:/home/ec2-user/
@@ -159,7 +166,7 @@ def send_telegram_message_for_alert(message):
                 return f"Failed to send alert message: {response.status_code}, {response.text}"
         return "Alert message sent to Telegram!"
     except Exception as e:
-        print(f"Error sending alert message: {e}")
+        send_telegram_message_for_alert(f"Error sending alert message: {e}")
         return f"Error sending alert message: {e}"
 
 def send_telegram_message_for_tracking(message):
@@ -174,7 +181,7 @@ def send_telegram_message_for_tracking(message):
     current_message = ""
 
     # Split message by theaters to avoid splitting within a theater
-    theater_entries = message.split("\n")
+    theater_entries = message.split(";")
 
     for entry in theater_entries:
         if len(current_message) + len(entry) + 1 > max_message_length:  # +1 for the newline character
@@ -203,7 +210,7 @@ def send_telegram_message_for_tracking(message):
                 return f"Failed to send tracking message: {response.status_code}, {response.text}"
         return "Tracking message sent to Telegram!"
     except Exception as e:
-        print(f"Error sending tracking message: {e}")
+        send_telegram_message_for_tracking(f"Error sending tracking message: {e}")
         return f"Error sending tracking message: {e}"
 
 def send_telegram_message_for_aws_status(message):
@@ -243,7 +250,7 @@ def send_telegram_message_for_aws_status(message):
             if response.status_code != 200:
                 print(f"Failed to send AWS_STATUS message: {response.status_code}, {response.text}")
     except Exception as e:
-        print(f"Error sending AWS_STATUS message: {e}")
+        send_telegram_message_for_aws_status(f"Error sending AWS_STATUS message: {e}")
 
 def load_previous_shows():
     """Load previous show data from the JSON file."""
@@ -259,6 +266,7 @@ def all_theaters():
     global theater_elements
     global time_pattern
     global status_mapping
+    global pattern
 
     content = ""
 
@@ -273,45 +281,49 @@ def all_theaters():
     # Extract details for each theater
     theater_count = 1
     for theater in theater_elements:
-        theater_name = theater.text.split(',')[0]  # Extract name before the first comma
-        if not theater_name.strip():
+        theater_text = theater.text
+        if theater_text and theater_text!=city.title():
+            theater_name = theater.text.split(',')[0]  # Extract name before the first comma
+            if not theater_name.strip():
+                continue
+
+            total_theaters += 1
+            content += f"Theater {theater_count}: {theater_name}\n"
+            try:
+                parent_div = theater.find_element(By.XPATH, "..//..//..")
+                session_times = parent_div.find_elements(By.XPATH, ".//div[contains(@class, 'yellowCol') or contains(@class, 'redCol') or contains(@class, 'greenCol') or contains(@class, 'greyCol')]")
+                
+                valid_session_times = []
+                for session in session_times:
+                    time_text = session.text.strip()
+                    match = time_pattern.match(time_text)
+                    if match:
+                        status_class = session.get_attribute("class")
+                        status_class_split = status_class.split()
+                        status = status_mapping.get(status_class_split[0], "Unknown")
+                        if (status == "Available"):
+                            available_count+=1
+                        elif(status == "FF"):
+                            ff_count += 1
+                        elif(status == "Few Left"):
+                            few_feft_count += 1
+                        elif(status == "Blocked"):
+                            blocked_count += 1
+                            
+                        valid_session_times.append(f"{match.group(0)} ({status})")
+
+                show_count = len(valid_session_times)
+                total_shows += show_count
+                if valid_session_times:
+                    content += f"  Shows ({show_count}): {' | '.join(valid_session_times)};"
+                else:
+                    print("  No session times available.")
+            except Exception as e:
+                print(f"Error processing theater: {str(e)}")
+
+            theater_count += 1
+        else:
             continue
-
-        total_theaters += 1
-        content += f"Theater {theater_count}: {theater_name}\n"
-        try:
-            parent_div = theater.find_element(By.XPATH, "..//..//..")
-            session_times = parent_div.find_elements(By.XPATH, ".//div[contains(@class, 'yellowCol') or contains(@class, 'redCol') or contains(@class, 'greenCol') or contains(@class, 'greyCol')]")
-            
-            valid_session_times = []
-            for session in session_times:
-                time_text = session.text.strip()
-                match = time_pattern.match(time_text)
-                if match:
-                    status_class = session.get_attribute("class")
-                    status_class_split = status_class.split()
-                    status = status_mapping.get(status_class_split[0], "Unknown")
-                    if (status == "Available"):
-                        available_count+=1
-                    elif(status == "FF"):
-                        ff_count += 1
-                    elif(status == "Few Left"):
-                        few_feft_count += 1
-                    elif(status == "Blocked"):
-                        blocked_count += 1
-                        
-                    valid_session_times.append(f"{match.group(0)} ({status})")
-
-            show_count = len(valid_session_times)
-            total_shows += show_count
-            if valid_session_times:
-                content += f"  Shows ({show_count}): {' | '.join(valid_session_times)}\n"
-            else:
-                print("  No session times available.")
-        except Exception as e:
-            print(f"Error processing theater: {str(e)}")
-
-        theater_count += 1
 
     content += (f"<b><i>\"Movie: {movie_name.upper()}\"\n")
     content += (f"City: {city.upper()}\n")
@@ -343,7 +355,6 @@ def compare_shows(previous_shows, current_shows):
             removed = []
             status_changed = []
             
-
             # Check for status changes, additions, and removals
             for time, status in current_dict.items():
                 if time not in previous_dict:
@@ -375,16 +386,24 @@ def compare_shows(previous_shows, current_shows):
             message += f"NEW THEATER \"<i>{theater}</i>\" ADDED WITH SHOWS: " + " | ".join(current) + "\n"
             changes_detected = True
 
+    # Detect removed theaters
+    for theater in previous_shows:
+        if theater not in current_shows:
+            show_details = " | ".join(previous_shows[theater])
+            message += f"<b>THEATER \"<i>{theater}</i>\" HAS BEEN REMOVED.</b>\n<b>With Shows:</b> <s>{show_details}</s>\n"
+            changes_detected = True
+
+
     if not changes_detected:
         message = "<u>NO CHANGES</u>"
 
     print(message)
     
-    if message!="<u>NO CHANGES</u>":
+    if message != "<u>NO CHANGES</u>":
         send_telegram_message_for_alert(message)
     
-
     return str(message)
+
 
 def main_function(theater,theater_name):
     global total_theaters
@@ -417,16 +436,21 @@ def total_function():
     from webdriver_manager.chrome import ChromeDriverManager
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
 
+    # Set up Chrome options for headless mode (if needed, remove the headless line for GUI)
     options = Options()
+    options.add_argument("--headless")  # Uncomment for headless mode
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-
     options.add_argument("--disable-gpu")
     options.add_argument("--remote-debugging-port=9222")
 
+    # Set up the WebDriver
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
+    # Maximize the window
+    driver.maximize_window()
 
     try:
         
@@ -434,11 +458,12 @@ def total_function():
             global iteration
             while True:
                 global aws_message
-                aws_message = ""
                 iteration += 1
                 print(f"{iteration} Iteration.")
                 aws_message = f"{iteration} Iteration.\n"
                 #send_telegram_message_for_aws_status(aws_message)
+
+                """
                 # Open the Paytm Movies page for the city
                 url = f"https://paytm.com/movies/{city.lower()}"
 
@@ -448,7 +473,7 @@ def total_function():
                     WebDriverWait(driver, 20).until(
                         EC.visibility_of_element_located((By.TAG_NAME, "body"))
                     )
-                    time.sleep(0.5)
+                    print("URL Loaded")
                     
                     if driver.current_url == "https://paytm.com/movies/select-city":
                         print(f"\"{city}\" is invalid. Please check the city name.")
@@ -457,9 +482,24 @@ def total_function():
 
                 except Exception as e:
                     print(e)
-                    core_process()
+                    core_process()     
 
-                print("URL Loaded")
+                try:
+                    # Wait for up to 10 seconds for the specific <img> element to be present
+                    WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "ToggleAdWidget_adDialog__Tmhtt"))
+                    )
+                    print("Ad image found.")
+
+                    # If the image is present, click on the close button
+                    close_button = driver.find_element(By.CLASS_NAME, "Overlay_backdrop__F12DQ")
+                    close_button.click()
+                    print("Close button clicked successfully.")
+                    time.sleep(0.5)
+
+                except:
+                    print("Ad image not found within the wait time.")
+                    pass
 
                 # Step 1: Select language (either Hindi, Telugu, etc.), if available
                 try:
@@ -490,7 +530,7 @@ def total_function():
                 
 
                 # Step 4: Wait for the page with the movie details to load
-                time.sleep(1)
+                time.sleep(0.5)
 
                 # Step 5: Check if the movie is available on the page
                 try:
@@ -507,61 +547,68 @@ def total_function():
                                 print("Movie found on page")
                                 print("Movie clicked")
                                 break  # Exit the loop after finding the match
-                            else:
-                                raise Exception("Force moving to except block")
+                        
+                        else:
+                            raise Exception("Force moving to except block")
                     movie_check()
                 except :
-                    try:
-                        driver.get(f"https://paytm.com/movies/{city.lower()}/search")
-
-                        search_movie = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.XPATH, "//input[@type = 'search']"))
-                        )
-                        search_movie.send_keys(movie_name)
-
-                        select_movie = WebDriverWait(driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, f"//a[.//img[contains(@alt, '{movie_name.title()}')]]"))
-                        )
-                        select_movie.click()
-                        print("Movie found on search")
-                        print("Movie clicked")
-
-                    except Exception as e:
-                        movie_not_available = ""
-                        movie_not_available += f"\"{movie_name}\" is not available in {city}."
-                        print(movie_not_available)
-                        aws_message += movie_not_available + "\n"
-                        aws_message += send_telegram_message_for_tracking(movie_not_available)+"\n"
-                        send_telegram_message_for_aws_status(aws_message)
-                        time.sleep(30)
-                        core_process()
+                """
+                try:
+                    driver.get(f"https://paytm.com/movies/{city.lower()}/search")
                     
+                    search_movie = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.XPATH, "//input[@type = 'search']"))
+                    )
+                    print("Search Page Loaded.")
+                    search_movie.send_keys(movie_name)
 
-                time.sleep(1)
+                    select_movie = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, f"//a[.//img[contains(@alt, '{movie_name.title()}')]]"))
+                    )
+                    select_movie.click()
+                    print("Movie found on search")
+                    print("Movie clicked")
+
+                except Exception as e:
+                    movie_not_available = ""
+                    movie_not_available += f"\"{movie_name}\" is not available in {city}."
+                    print(movie_not_available)
+                    aws_message += movie_not_available + "\n"
+                    aws_message += send_telegram_message_for_tracking(movie_not_available)+"\n"
+                    send_telegram_message_for_aws_status(aws_message)
+                    time.sleep(30)
+                    core_process()
 
                 # Check if the language selection popup is present
                 try:
-                    WebDriverWait(driver, 5).until(
+                    WebDriverWait(driver, 3).until(
                         EC.presence_of_element_located((By.CLASS_NAME, "LanguageSelectionDialog_langSelectionContainer__jZY7u"))
                     )
                     time.sleep(0.5)
                     
                     # Handle the language selection popup
-                    telugu_radio_button = driver.find_element(By.ID, f"{language.title()}-index-selection-dialog")
-                    if not telugu_radio_button.is_selected():
-                        telugu_radio_button.click()
-                        print(f"Pop-upped and clicked {language}")
-
-                    # Click the Proceed button
-                    proceed_button = driver.find_element(By.CLASS_NAME, "LanguageSelectionDialog_applyBtn__2frJM")
-                    proceed_button.click()
-                    print("Clicked proceed button")
+                    try:
+                        language_radio_button = driver.find_element(By.ID, f"{language.title()}-index-selection-dialog")
+                        if not language_radio_button.is_selected():
+                            language_radio_button.click()
+                            print(f"Pop-upped and clicked {language}")
+                        # Click the Proceed button
+                        proceed_button = driver.find_element(By.CLASS_NAME, "LanguageSelectionDialog_applyBtn__2frJM")
+                        proceed_button.click()
+                        print("Clicked proceed button")
+                    except:
+                        print(f"{language} is not found in popup")
+                        aws_message+=f"{language} is not found in popup"
+                        send_telegram_message_for_aws_status(aws_message)
+                        send_telegram_message_for_tracking(f"{language} is not found in popup")
+                        time.sleep(60)
+                        core_process()
                     
                 except:
                     pass
                         
                 # Wait for the page with dates to load
-                WebDriverWait(driver, 15).until(
+                WebDriverWait(driver, 10).until(
                     EC.visibility_of_all_elements_located((By.CLASS_NAME, "DatesDesktop_cinemaDates__jMukI"))
                 )
                 
@@ -575,7 +622,7 @@ def total_function():
                         date_text = date_element.find_element(By.CLASS_NAME, "DatesDesktop_date__bL7mg").text.strip()
                         available_dates.append(date_text)
                         if date_text == str(user_date):
-                            WebDriverWait(driver, 20).until(EC.element_to_be_clickable(date_element))
+                            WebDriverWait(driver, 10).until(EC.element_to_be_clickable(date_element))
                             actions = ActionChains(driver)
                             actions.move_to_element(date_element).click().perform()
                             driver.execute_script("arguments[0].scrollIntoView(true);", date_element)
@@ -600,14 +647,44 @@ def total_function():
                 except Exception as e:
                     core_process()
 
-                time.sleep(3)
+                time.sleep(2)
+                                
+                try:
+                    element = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.ID, "filterButton"))
+                    )
+                    # Get the text content of the element
+                    content = element.text.strip().split()[0]
+                    print(content)
+                    # Check if the content matches the 'language' variable
+                    if content.lower() == language.lower():
+                        print("Language matches on theater page!")
+                    else:
+                        print(f"\"{language}\" language is not matched in theater page")
+                        aws_message+=f"\"{language}\" language is not matched in theater page"
+                        send_telegram_message_for_aws_status(aws_message)
+                        send_telegram_message_for_tracking(f"\"{language}\" language is not matched in theater page")
+                        time.sleep(60)
+                        core_process()
+
+                except Exception as e:
+                    core_process()
 
                 def theater_run():
+                    try:
+                        WebDriverWait(driver, 20).until(
+                            EC.presence_of_element_located((By.CLASS_NAME, "MovieSessionsListingDesktop_movieSessions__KYv1d"))
+                        )
+                    except:
+                        total_function()
+                    print("Theaters Loaded")
                     global aws_message
                     try:
                         # Step 8: Extract theater names and session times
                         global theater_elements
-                        theater_elements = driver.find_elements(By.XPATH, f"//a[contains(@href, '/movies/{city.lower()}')]")
+                        # Extracting only theater elements
+                        theater_elements = driver.find_elements(
+                        By.XPATH, f"//div[contains(@class, 'MovieSessionsListingDesktop_details__Aq3st')]//a[contains(@href, '/movies/{city.lower()}/')]")
 
                         # Regular expression to extract only time ending with AM/PM
                         global time_pattern
@@ -631,24 +708,27 @@ def total_function():
                         if (iteration % tracking_frequencey == 0 or iteration == 1):
                             print(f"Time to track entire {city}")
                             aws_message += all_theaters() + "\n"
-                        time.sleep(1)
                         count = 0
-                        print("Extracting theaters")
                         for theater in theater_elements:
-                            theater_name = theater.text.split(',')[0]  # Extract name before the first comma
 
-                            if theater_name.lower() == city.lower():
-                                continue
-                            if not theater_name.strip():
-                                break
+                            if True:
 
-                            if not theater_list:
-                                main_function(theater,theater_name)
-                                count += 1
-                            else:
-                                if theater_name in theater_list:  # Check if the theater is in our list
-                                    main_function(theater,theater_name)    
+                                theater_name = theater.text.split(',')[0]  # Extract name before the first comma
+                                """if theater_name.lower() == city.lower():
+                                    continue"""
+
+                                if not theater_name.strip():
+                                    break
+
+                                if not theater_list:
+                                    main_function(theater,theater_name)
                                     count += 1
+                                else:
+                                    if theater_name in theater_list:  # Check if the theater is in our list
+                                        main_function(theater,theater_name)    
+                                        count += 1
+                            else:
+                                continue
                                 
                         if not count:
                             aws_message += "No mentioned theaters are available!"
@@ -675,24 +755,21 @@ def total_function():
                 while(True):
                     try:
                         iteration += 1
-                        print(f"{iteration} Iteration.")
-                        aws_message = f"{iteration} Iteration.\n"
-                        driver.refresh()
-                        WebDriverWait(driver, 20).until(
-                            lambda d: d.execute_script("return document.readyState") == "complete"
-                        )
-                        print("Page loaded")
-                        try:
-                            # Wait until the element with the specified class appears and contains the required text
-                            WebDriverWait(driver, 20).until(
-                                EC.presence_of_element_located((By.CLASS_NAME, "MovieSessionsListingDesktop_movieSessions__KYv1d"))
-                            )
-
-                        except Exception as e:
+                        
+                        if(iteration % 200 == 0):
+                            print("RESTARTING\n")
+                            aws_message = "RESTARTING\n"
+                            iteration-=1
+                            driver.quit()
+                            time.sleep(120)
                             total_function()
-
-                        time.sleep(running_frequencey)
-                        theater_run()
+                        else:
+                            print(f"{iteration} Iteration.")
+                            aws_message = f"{iteration} Iteration.\n"
+                            driver.refresh()
+                            gc.collect()
+                            time.sleep(running_frequencey)
+                            theater_run()
 
                     except:
                         total_function()
@@ -705,6 +782,10 @@ def total_function():
         send_telegram_message_for_aws_status(e)
         send_telegram_message_for_tracking(e)
         print("Running again")
+        send_telegram_message_for_aws_status("Running again")
         total_function()
 
-total_function()
+try:
+    total_function()
+except:
+    total_function()
